@@ -17,6 +17,28 @@ const LOGICAL_WIDTH = 1920, LOGICAL_HEIGHT = 1080;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const toRad = (deg) => (deg * Math.PI) / 180;
 
+const STORAGE_KEY = "snowfall_settings_v1";
+
+function saveSettings(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // console.log("💾 settings saved:", state);
+  } catch (err) {
+    console.warn("localStorage save failed:", err);
+  }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn("localStorage load failed:", err);
+    return null;
+  }
+}
+
 window.onVTSPoseUpdate = function (params) {
   VTSState.connected = true;
   for (const p of params) {
@@ -552,8 +574,41 @@ function initRive() {
       inputNames.forEach(name => {
         inputs[name] = vm.number(name) || vm.boolean(name);
       });
+      
+      const persistentInputs = [
+        "density", "velocity", "direction",
+        "flakeSizeMin", "flakeSizeMax", "feather",
+        "hitboxX", "hitboxY", "hitboxRadius",
+        "rectHitboxX", "rectHitboxY",
+        "rectHitboxWidth", "rectHitboxHeight",
+        "isHeadEnabled", "isShouldersEnabled",
+        "offsetX", "offsetY",
+        "rectOffsetX", "rectOffsetY"
+      ];
 
-      // INICIALIZA SNOW SÓ AGORA
+      persistentInputs.forEach(name => {
+        const input = inputs[name];
+        if (!input) return;
+
+        input.onChange = () => {
+          const snapshot = {};
+          persistentInputs.forEach(key => {
+            if (inputs[key]) snapshot[key] = inputs[key].value;
+          });
+          saveSettings(snapshot);
+        };
+      });
+
+      const saved = loadSettings();
+      if (saved) {
+        console.log("🔄 Restaurando configurações salvas…", saved);
+        persistentInputs.forEach(name => {
+          if (inputs[name] && saved[name] !== undefined) {
+            inputs[name].value = saved[name];
+          }
+        });
+      }
+
       if (setupSnowCanvas()) {
         snow = new SnowEngine(snowCanvas, { density: 50, velocity: 80, direction: 0 });
         console.log("✅ SISTEMA COMPLETO INICIALIZADO - SNOW ATIVO");
