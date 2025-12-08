@@ -245,6 +245,7 @@ class SnowEngine {
     return this.flakeSizeMin + Math.random() * (Math.max(this.flakeSizeMax, this.flakeSizeMin) - this.flakeSizeMin);
   }
 
+  // ✅ MÉTODO CORRETO (sem 'function')
   wrapFlakePosition(flake) {
     // Wrap vertical (reaparece no topo ou fundo)
     if (flake.y > this.height + 10) {
@@ -301,45 +302,8 @@ class SnowEngine {
     }
   }
 
-  rectSignedDistance(px, py, rectX, rectY, width, height, cornerRadius) {
-    const r = Math.max(0, Math.min(cornerRadius, width / 2, height / 2));
-    const centerX = rectX + width / 2;
-    const centerY = rectY + height / 2;
-    const dx = px - centerX;
-    const dy = py - centerY;
-    const halfW = width / 2;
-    const halfH = height / 2;
-    const topCornerY = -halfH + r;
-
-    let distance, nx, ny;
-
-    if (dx < -halfW + r && dy < topCornerY) {
-      const cdx = dx - (-halfW + r);
-      const cdy = dy - topCornerY;
-      const dist = Math.hypot(cdx, cdy);
-      distance = dist - r;
-      nx = dist > 1e-4 ? cdx / dist : -1;
-      ny = dist > 1e-4 ? cdy / dist : 0;
-    } else if (dx > halfW - r && dy < topCornerY) {
-      const cdx = dx - (halfW - r);
-      const cdy = dy - topCornerY;
-      const dist = Math.hypot(cdx, cdy);
-      distance = dist - r;
-      nx = dist > 1e-4 ? cdx / dist : 1;
-      ny = dist > 1e-4 ? cdy / dist : 0;
-    } else {
-      const distLeft = dx + halfW;
-      const distRight = halfW - dx;
-      const distTop = dy + halfH;
-      const distBottom = halfH - dy;
-      const minDist = Math.min(distLeft, distRight, distTop, distBottom);
-      distance = -minDist;
-      nx = minDist === distLeft ? -1 : minDist === distRight ? 1 : 0;
-      ny = minDist === distTop ? -1 : minDist === distBottom ? 1 : 0;
-    }
-
-    return { distance, nx, ny };
-  }
+  // ❌ REMOVA este método completamente
+  // _spawnPositionFromDirection() { ... }
 
   update(dt) {
     this.time += dt;
@@ -466,18 +430,20 @@ class SnowEngine {
             flake.opacity -= this.meltSpeed * dt * 2;
           }
         }
+
+        // ✅ CHAMADA DENTRO DO LOOP E DO BLOCO if (!remove)
         this.wrapFlakePosition(flake);
       }
 
       if (remove) this.snowflakes.splice(i, 1);
       else i++;
     }
-    
+
     const deficit = Math.floor(this.density) - this.snowflakes.length;
     for (let j = 0; j < deficit; j++) {
       this.snowflakes.push({
         x: Math.random() * this.width,
-        y: -10, // SEMPRE spawna no topo
+        y: -10, // ✅ SEMPRE spawna no topo
         size: this.randomFlakeSize(),
         speed: 0.8 + Math.random() * 0.4,
         sway: 10 + Math.random() * 20,
@@ -563,6 +529,79 @@ class SnowEngine {
 
     ctx.restore();
   }
+}
+
+// ✅ CORRIJA o initRive() - use PERSISTENT_INPUTS
+function initRive() {
+  console.log("Loading Rive…");
+  riveInstance = new rive.Rive({
+    src: RIVE_FILE_URL,
+    canvas: riveCanvas,
+    autoplay: true,
+    autoBind: true,
+    shouldDisableRenderingWhenOffscreen: true,
+    artboard: "Main",
+    stateMachines: ["State Machine 1"],
+    layout: new rive.Layout({ fit: rive.Fit.contain, alignment: rive.Alignment.center }),
+    onLoad: () => {
+      console.log("✅ Rive carregado");
+      riveInstance.resizeDrawingSurfaceToCanvas();
+
+      const rootVm = riveInstance.viewModelInstance;
+      if (!rootVm) {
+        console.error("❌ ViewModel raiz não encontrado");
+        return;
+      }
+
+      vm = rootVm.viewModel("View Model 1") || rootVm;
+      
+      const inputNames = [
+        "snowFps", "snowDpr", "density", "velocity", "direction",
+        "directionX", "directionY", "flakeSizeMin", "flakeSizeMax", "feather",
+        "hitboxX", "hitboxY", "hitboxRadius", "rectHitboxX", "rectHitboxY",
+        "rectHitboxWidth", "rectHitboxHeight", "rectHitboxCornerRadius",
+        "hitboxEnabled", "rectHitboxEnabled", "showHitbox", "showRectHitbox",
+        "isSetupMode", "isHeadEnabled", "isShouldersEnabled",
+        "offsetX", "offsetY", "rectOffsetX", "rectOffsetY"
+      ];
+
+      inputNames.forEach(name => {
+        inputs[name] = vm.number(name) || vm.boolean(name);
+      });
+
+      const saved = loadSettingsFromStorage();
+      if (saved) {
+        console.log("🔄 Restaurando configurações salvas…", saved);
+        PERSISTENT_INPUTS.forEach((name) => {
+          const inp = inputs[name];
+          if (inp && saved[name] !== undefined) {
+            inp.value = saved[name];
+          }
+        });
+      }
+
+      // ✅ CORRETO: use PERSISTENT_INPUTS
+      PERSISTENT_INPUTS.forEach(name => {
+        const input = inputs[name];
+        if (!input) return;
+
+        input.onChange = () => {
+          const snapshot = {};
+          PERSISTENT_INPUTS.forEach(key => {
+            if (inputs[key]) snapshot[key] = inputs[key].value;
+          });
+          saveSettingsToStorage(snapshot); // ✅ Função correta
+        };
+      });
+
+      if (setupSnowCanvas()) {
+        snow = new SnowEngine(snowCanvas, { density: 50, velocity: 80, direction: 0 });
+        console.log("✅ SISTEMA COMPLETO INICIALIZADO - SNOW ATIVO");
+      } else {
+        console.error("❌ FALHA NA INICIALIZAÇÃO DO SNOW CANVAS");
+      }
+    },
+  });
 }
 
 const riveCanvas = document.getElementById("rive-canvas");
