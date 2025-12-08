@@ -601,23 +601,54 @@ function initRive() {
         inputs[name] = vm.number(name) || vm.boolean(name);
       });
 
-      const saved = loadSettingsFromStorage();
-      if (saved) {
-        console.log("🔄 Restaurando configurações salvas…", saved);
-        PERSISTENT_INPUTS.forEach((name) => {
-          const inp = inputs[name];
-          if (inp && saved[name] !== undefined) {
-            inp.value = saved[name];
+// ===== NO INITRIVE, SUBSTITUA O BLOCO DE LOAD POR: =====
+
+const saved = loadSettingsFromStorage();
+if (saved) {
+  console.log("🔄 Restaurando configurações salvas…", saved);
+  
+        // Aguarda um frame para garantir que tudo está pronto
+        requestAnimationFrame(() => {
+          PERSISTENT_INPUTS.forEach((name) => {
+            const inp = inputs[name];
+            if (inp && saved[name] !== undefined) {
+              console.log(`✅ Restaurando ${name}: ${saved[name]} (tipo: ${typeof saved[name]})`);
+              inp.value = saved[name];
+              
+              // Força notificação (se disponível)
+              if (inp.onChange) {
+                console.log(`🔔 Disparando onChange para ${name}`);
+                inp.onChange();
+              }
+            } else {
+              console.warn(`⚠️ Input '${name}' não encontrado ou sem valor salvo`);
+            }
+          });
+          
+          // Força atualização do state machine
+          if (riveInstance) {
+            console.log("🔄 Forçando atualização do State Machine");
+            riveInstance.startRendering();
           }
         });
       }
 
+      // ===== E NO FINAL DO INITRIVE, SUBSTITUA O EVENT BINDING POR: =====
+
       // ✅ CORRETO: use PERSISTENT_INPUTS e saveSettingsToStorage
       PERSISTENT_INPUTS.forEach(name => {
         const input = inputs[name];
-        if (!input) return;
+        if (!input) {
+          console.warn(`⚠️ Input '${name}' não encontrado para binding`);
+          return;
+        }
+
+        // Guarda o valor original se existir
+        const initialValue = input.value;
+        console.log(`🔗 Binding onChange para ${name} (valor inicial: ${initialValue})`);
 
         input.onChange = () => {
+          console.log(`✨ Input ${name} mudou para: ${input.value}`);
           const snapshot = {};
           PERSISTENT_INPUTS.forEach(key => {
             if (inputs[key]) snapshot[key] = inputs[key].value;
