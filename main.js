@@ -1,4 +1,4 @@
-
+// ===== DECLARAÇÕES GLOBAIS (mantenha no topo) =====
 const VTSState = {
   connected: false,
   modelX: 0, modelY: 0, modelScale: 1, modelRotationZ: 0,
@@ -34,6 +34,13 @@ let lastSavedSettingsJson = null;
 let lastSaveTimeMs = 0;
 const SETTINGS_SAVE_INTERVAL_MS = 2000;
 
+let snowCanvas = null, snowCtx = null, snowDprScale = 0.5;
+let snow = null; 
+const riveCanvas = document.getElementById("rive-canvas");
+let riveInstance = null, vm = null;
+const inputs = {}; // ✅ Declarado UMA vez no topo
+
+// ===== FUNÇÕES DE STORAGE =====
 function loadSettingsFromStorage() {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
@@ -51,7 +58,7 @@ function saveSettingsToStorage(snapshot) {
     localStorage.setItem(SETTINGS_STORAGE_KEY, json);
     lastSavedSettingsJson = json;
     lastSaveTimeMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
-    // console.log("💾 settings saved", snapshot);
+    console.log("💾 settings saved", snapshot);
   } catch (err) {
     console.warn("localStorage save failed:", err);
   }
@@ -69,21 +76,18 @@ function collectSettingsSnapshot() {
 }
 
 function maybeAutoSaveSettings() {
-  // só salva se já temos VM
   if (!vm) return;
-
   const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
   if (now - lastSaveTimeMs < SETTINGS_SAVE_INTERVAL_MS) return;
-
+  
   const snap = collectSettingsSnapshot();
   const json = JSON.stringify(snap);
-
   if (json === lastSavedSettingsJson) return;
-
+  
   saveSettingsToStorage(snap);
 }
 
-
+// ===== Funções VTS =====
 window.onVTSPoseUpdate = function (params) {
   VTSState.connected = true;
   for (const p of params) {
@@ -105,7 +109,7 @@ window.onVTSPoseUpdate = function (params) {
 
 function getVTSHeadOffsets() {
   if (!VTSState.connected) return { x: 0, y: 0, scale: 1 };
-
+  // ... (resto do código igual) ...
   const fx = clamp(VTSState.faceX, -FACE_RANGE, FACE_RANGE) / FACE_RANGE;
   const fy = -clamp(VTSState.faceY, -FACE_RANGE, FACE_RANGE) / FACE_RANGE;
   const mx = clamp(VTSState.modelX, -MODEL_RANGE, MODEL_RANGE) / MODEL_RANGE;
@@ -121,26 +125,21 @@ function getVTSHeadOffsets() {
   let offsetX = nx * rangeX;
   let offsetY = ny * rangeY;
 
-if (Number.isFinite(VTSState.faceAngleZ)) {
-  const ang = clamp(VTSState.faceAngleZ, -MAX_TILT_DEG, MAX_TILT_DEG);
-  const rad = toRad(ang);
-  const baseRadius =
-    (inputs.hitboxRadius && typeof inputs.hitboxRadius.value === "number"
-      ? inputs.hitboxRadius.value
-      : HEAD_TILT_FALLBACK_RADIUS);
-  const radius = baseRadius * HEAD_TILT_MULTIPLIER;
-  const dx = Math.sin(rad) * radius;
-  const dy = (1 - Math.cos(rad)) * radius;
+  if (Number.isFinite(VTSState.faceAngleZ)) {
+    const ang = clamp(VTSState.faceAngleZ, -MAX_TILT_DEG, MAX_TILT_DEG);
+    const rad = toRad(ang);
+    const baseRadius =
+      (inputs.hitboxRadius && typeof inputs.hitboxRadius.value === "number"
+        ? inputs.hitboxRadius.value
+        : HEAD_TILT_FALLBACK_RADIUS);
+    const radius = baseRadius * HEAD_TILT_MULTIPLIER;
+    const dx = Math.sin(rad) * radius;
+    const dy = (1 - Math.cos(rad)) * radius;
+    offsetX += dx;
+    offsetY += dy;
+  }
 
-  offsetX += dx;
-  offsetY += dy;
-}
-
-  return {
-    x: offsetX,
-    y: offsetY,
-    scale: VTSState.modelScale || 1,
-  };
+  return { x: offsetX, y: offsetY, scale: VTSState.modelScale || 1 };
 }
 
 function getVTSBodyOffsets() {
@@ -149,8 +148,7 @@ function getVTSBodyOffsets() {
   return { x: head.x * VTS_SHOULDER_STRENGTH, y: head.y * VTS_SHOULDER_STRENGTH, scale: head.scale };
 }
 
-let snowCanvas = null, snowCtx = null, snowDprScale = 0.5;
-
+// ===== CANVAS E ENGINE =====
 function setupSnowCanvas() {
   snowCanvas = document.getElementById("snow-canvas");
   if (!snowCanvas) {
@@ -190,8 +188,7 @@ function joystickXYToAngleDeg(x, y) {
   return deg;
 }
 
-let snow = null; 
-
+// ===== CLASSE SNOWENGINE (com wrap corrigido) =====
 class SnowEngine {
   constructor(canvas, config = {}) {
     if (!canvas || !canvas.getContext) {
@@ -245,7 +242,6 @@ class SnowEngine {
     return this.flakeSizeMin + Math.random() * (Math.max(this.flakeSizeMax, this.flakeSizeMin) - this.flakeSizeMin);
   }
 
-  // ✅ MÉTODO CORRETO (sem 'function')
   wrapFlakePosition(flake) {
     // Wrap vertical (reaparece no topo ou fundo)
     if (flake.y > this.height + 10) {
@@ -300,10 +296,48 @@ class SnowEngine {
         passThrough: Math.random() < this.hitboxPassThroughChance,
       });
     }
+    console.log(`✅ ${count} flocos gerados no topo`);
   }
 
-  // ❌ REMOVA este método completamente
-  // _spawnPositionFromDirection() { ... }
+  rectSignedDistance(px, py, rectX, rectY, width, height, cornerRadius) {
+    const r = Math.max(0, Math.min(cornerRadius, width / 2, height / 2));
+    const centerX = rectX + width / 2;
+    const centerY = rectY + height / 2;
+    const dx = px - centerX;
+    const dy = py - centerY;
+    const halfW = width / 2;
+    const halfH = height / 2;
+    const topCornerY = -halfH + r;
+
+    let distance, nx, ny;
+
+    if (dx < -halfW + r && dy < topCornerY) {
+      const cdx = dx - (-halfW + r);
+      const cdy = dy - topCornerY;
+      const dist = Math.hypot(cdx, cdy);
+      distance = dist - r;
+      nx = dist > 1e-4 ? cdx / dist : -1;
+      ny = dist > 1e-4 ? cdy / dist : 0;
+    } else if (dx > halfW - r && dy < topCornerY) {
+      const cdx = dx - (halfW - r);
+      const cdy = dy - topCornerY;
+      const dist = Math.hypot(cdx, cdy);
+      distance = dist - r;
+      nx = dist > 1e-4 ? cdx / dist : 1;
+      ny = dist > 1e-4 ? cdy / dist : 0;
+    } else {
+      const distLeft = dx + halfW;
+      const distRight = halfW - dx;
+      const distTop = dy + halfH;
+      const distBottom = halfH - dy;
+      const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+      distance = -minDist;
+      nx = minDist === distLeft ? -1 : minDist === distRight ? 1 : 0;
+      ny = minDist === distTop ? -1 : minDist === distBottom ? 1 : 0;
+    }
+
+    return { distance, nx, ny };
+  }
 
   update(dt) {
     this.time += dt;
@@ -499,12 +533,10 @@ class SnowEngine {
       return;
     }
     
-    // FORÇA VISIBILIDADE
     ctx.globalAlpha = 1.0;
     ctx.clearRect(0, 0, this.width, this.height);
     this.drawHitboxes();
 
-    // Debug
     if (this.showDebug && VTSState.connected) {
       ctx.save();
       ctx.fillStyle = "#00ff00";
@@ -531,7 +563,7 @@ class SnowEngine {
   }
 }
 
-// ✅ CORRIJA o initRive() - use PERSISTENT_INPUTS
+// ===== INICIALIZAÇÃO RIVE (ÚNICA FUNÇÃO) =====
 function initRive() {
   console.log("Loading Rive…");
   riveInstance = new rive.Rive({
@@ -580,7 +612,7 @@ function initRive() {
         });
       }
 
-      // ✅ CORRETO: use PERSISTENT_INPUTS
+      // ✅ CORRETO: use PERSISTENT_INPUTS e saveSettingsToStorage
       PERSISTENT_INPUTS.forEach(name => {
         const input = inputs[name];
         if (!input) return;
@@ -590,7 +622,7 @@ function initRive() {
           PERSISTENT_INPUTS.forEach(key => {
             if (inputs[key]) snapshot[key] = inputs[key].value;
           });
-          saveSettingsToStorage(snapshot); // ✅ Função correta
+          saveSettingsToStorage(snapshot);
         };
       });
 
@@ -604,83 +636,7 @@ function initRive() {
   });
 }
 
-const riveCanvas = document.getElementById("rive-canvas");
-let riveInstance = null, vm = null;
-const inputs = {};
-
-function initRive() {
-  console.log("Loading Rive…");
-  riveInstance = new rive.Rive({
-    src: RIVE_FILE_URL,
-    canvas: riveCanvas,
-    autoplay: true,
-    autoBind: true,
-    shouldDisableRenderingWhenOffscreen: true,
-    artboard: "Main",
-    stateMachines: ["State Machine 1"],
-    layout: new rive.Layout({ fit: rive.Fit.contain, alignment: rive.Alignment.center }),
-    onLoad: () => {
-      console.log("✅ Rive carregado");
-      riveInstance.resizeDrawingSurfaceToCanvas();
-
-      const rootVm = riveInstance.viewModelInstance;
-      if (!rootVm) {
-        console.error("❌ ViewModel raiz não encontrado");
-        return;
-      }
-
-      vm = rootVm.viewModel("View Model 1") || rootVm;
-      
-      const inputNames = [
-        "snowFps", "snowDpr", "density", "velocity", "direction",
-        "directionX", "directionY", "flakeSizeMin", "flakeSizeMax", "feather",
-        "hitboxX", "hitboxY", "hitboxRadius", "rectHitboxX", "rectHitboxY",
-        "rectHitboxWidth", "rectHitboxHeight", "rectHitboxCornerRadius",
-        "hitboxEnabled", "rectHitboxEnabled", "showHitbox", "showRectHitbox",
-        "isSetupMode", "isHeadEnabled", "isShouldersEnabled",
-        "offsetX", "offsetY", "rectOffsetX", "rectOffsetY"
-      ];
-
-      inputNames.forEach(name => {
-        inputs[name] = vm.number(name) || vm.boolean(name);
-      });
-
-      const saved = loadSettingsFromStorage();
-      if (saved) {
-        console.log("🔄 Restaurando configurações salvas…", saved);
-        PERSISTENT_INPUTS.forEach((name) => {
-          const inp = inputs[name];
-          if (inp && saved[name] !== undefined) {
-            inp.value = saved[name];
-          }
-        });
-      }
-
-      persistentInputs.forEach(name => {
-        const input = inputs[name];
-        if (!input) return;
-
-        input.onChange = () => {
-          const snapshot = {};
-          persistentInputs.forEach(key => {
-            if (inputs[key]) snapshot[key] = inputs[key].value;
-          });
-          saveSettings(snapshot);
-        };
-      });
-
-      if (setupSnowCanvas()) {
-        snow = new SnowEngine(snowCanvas, { density: 50, velocity: 80, direction: 0 });
-        console.log("✅ SISTEMA COMPLETO INICIALIZADO - SNOW ATIVO");
-      } else {
-        console.error("❌ FALHA NA INICIALIZAÇÃO DO SNOW CANVAS");
-      }
-    },
-  });
-}
-
-initRive();
-
+// ===== MAIN LOOP =====
 let snowTargetFps = 30, snowFrameMs = 1000 / snowTargetFps;
 let lastTime = performance.now(), snowAccumMs = 0;
 
@@ -706,13 +662,10 @@ function updateSnowDprFromVM() {
 
 function rotateAroundPivot(x, y, pivotX, pivotY, angleDeg) {
   const a = angleDeg * Math.PI / 180;
-
   const dx = x - pivotX;
   const dy = y - pivotY;
-
   const cosA = Math.cos(a);
   const sinA = Math.sin(a);
-
   return {
     x: pivotX + dx * cosA - dy * sinA,
     y: pivotY + dx * sinA + dy * cosA
@@ -743,18 +696,12 @@ function mainLoop(now) {
       ? { x: baseHeadVts.x * SETUP_TRACKING_STRENGTH, y: baseHeadVts.y * SETUP_TRACKING_STRENGTH, scale: baseHeadVts.scale }
       : baseHeadVts;
 
-    console.log("headVts.y", headVts.y);
-
     const bodyVts = isSetup
       ? { x: baseBodyVts.x * SETUP_TRACKING_STRENGTH, y: baseBodyVts.y * SETUP_TRACKING_STRENGTH, scale: baseBodyVts.scale }
       : baseBodyVts;
 
-    const pivotX = 0;
-    const pivotY = 80;
-
     if (inputs.offsetX) inputs.offsetX.value = headVts.x;
     if (inputs.offsetY) inputs.offsetY.value = headVts.y;
-
     if (inputs.rectOffsetX) inputs.rectOffsetX.value = bodyVts.x;
     if (inputs.rectOffsetY) inputs.rectOffsetY.value = bodyVts.y;
 
@@ -790,10 +737,10 @@ function mainLoop(now) {
       rectHitboxCornerRadius: inputs.rectHitboxCornerRadius?.value,
       hitboxEnabled: headEnabled,
       rectHitboxEnabled: shouldersEnabled,
-
     };
 
     snow.updateSettings(configUpdate);
+    maybeAutoSaveSettings();
   }
 
   snowAccumMs += deltaMs;
@@ -809,4 +756,6 @@ function mainLoop(now) {
   requestAnimationFrame(mainLoop);
 }
 
+// ===== INICIALIZAÇÃO FINAL =====
+initRive(); // Inicia tudo
 requestAnimationFrame(mainLoop);
