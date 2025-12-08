@@ -83,25 +83,6 @@ function maybeAutoSaveSettings() {
   saveSettingsToStorage(snap);
 }
 
-function saveSettings(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    // console.log("💾 settings saved:", state);
-  } catch (err) {
-    console.warn("localStorage save failed:", err);
-  }
-}
-
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (err) {
-    console.warn("localStorage load failed:", err);
-    return null;
-  }
-}
 
 window.onVTSPoseUpdate = function (params) {
   VTSState.connected = true;
@@ -264,13 +245,49 @@ class SnowEngine {
     return this.flakeSizeMin + Math.random() * (Math.max(this.flakeSizeMax, this.flakeSizeMin) - this.flakeSizeMin);
   }
 
+  wrapFlakePosition(flake) {
+    // Wrap vertical (reaparece no topo ou fundo)
+    if (flake.y > this.height + 10) {
+      flake.y = -10;
+      flake.x = Math.random() * this.width;
+      flake.opacity = 1.0;
+      flake.velocityX = 0;
+      flake.velocityY = 0;
+      flake.size = this.randomFlakeSize();
+      flake.passThrough = Math.random() < this.hitboxPassThroughChance;
+      return true;
+    }
+    if (flake.y < -10) {
+      flake.y = this.height + 10;
+      flake.x = Math.random() * this.width;
+      flake.opacity = 1.0;
+      flake.velocityX = 0;
+      flake.velocityY = 0;
+      flake.size = this.randomFlakeSize();
+      flake.passThrough = Math.random() < this.hitboxPassThroughChance;
+      return true;
+    }
+
+    // Wrap horizontal (reaparece nos lados)
+    if (flake.x < -10) {
+      flake.x = this.width + 10;
+      return true;
+    }
+    if (flake.x > this.width + 10) {
+      flake.x = -10;
+      return true;
+    }
+
+    return false;
+  }
+
   regenerateSnowflakes() {
     this.snowflakes.length = 0;
     const count = Math.floor(this.density);
     for (let i = 0; i < count; i++) {
       this.snowflakes.push({
         x: Math.random() * this.width,
-        y: Math.random() * this.height,
+        y: -10, // ✅ SEMPRE spawna no topo
         size: this.randomFlakeSize(),
         speed: 0.8 + Math.random() * 0.4,
         sway: 10 + Math.random() * 20,
@@ -322,38 +339,6 @@ class SnowEngine {
     }
 
     return { distance, nx, ny };
-  }
-
-    _spawnPositionFromDirection() {
-    const dirRad = toRad(this.direction || 0);
-    let dx = Math.sin(dirRad);
-    let dy = Math.cos(dirRad);
-
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
-      dx = 0;
-      dy = 1;
-    }
-
-    let x, y;
-    if (Math.abs(dy) >= Math.abs(dx)) {
-      if (dy > 0) {
-        x = Math.random() * this.width;
-        y = -10;
-      } else {
-        x = Math.random() * this.width;
-        y = this.height + 10;
-      }
-    } else {
-      if (dx > 0) {
-        x = -10;
-        y = Math.random() * this.height;
-      } else {
-        x = this.width + 10;
-        y = Math.random() * this.height;
-      }
-    }
-
-    return { x, y };
   }
 
   update(dt) {
@@ -481,36 +466,18 @@ class SnowEngine {
             flake.opacity -= this.meltSpeed * dt * 2;
           }
         }
-
-        const outOfBounds =
-          flake.y > this.height + 10 ||
-          flake.y < -10 ||
-          flake.x > this.width + 10 ||
-          flake.x < -10;
-
-        if (outOfBounds) {
-          const spawn = this._spawnPositionFromDirection();
-
-          flake.x = spawn.x;
-          flake.y = spawn.y;
-          flake.opacity = 1;
-          flake.velocityX = 0;
-          flake.velocityY = 0;
-          flake.size = this.randomFlakeSize();
-          flake.passThrough = Math.random() < this.hitboxPassThroughChance;
-        }
+        this.wrapFlakePosition(flake);
       }
 
       if (remove) this.snowflakes.splice(i, 1);
       else i++;
     }
+    
     const deficit = Math.floor(this.density) - this.snowflakes.length;
     for (let j = 0; j < deficit; j++) {
-      const spawn = this._spawnPositionFromDirection();
-
       this.snowflakes.push({
-        x: spawn.x,
-        y: spawn.y,
+        x: Math.random() * this.width,
+        y: -10, // SEMPRE spawna no topo
         size: this.randomFlakeSize(),
         speed: 0.8 + Math.random() * 0.4,
         sway: 10 + Math.random() * 20,
@@ -650,18 +617,6 @@ function initRive() {
         });
       }
 
-      
-      const persistentInputs = [
-        "density", "velocity", "direction",
-        "flakeSizeMin", "flakeSizeMax", "feather",
-        "hitboxX", "hitboxY", "hitboxRadius",
-        "rectHitboxX", "rectHitboxY",
-        "rectHitboxWidth", "rectHitboxHeight",
-        "isHeadEnabled", "isShouldersEnabled",
-        "offsetX", "offsetY",
-        "rectOffsetX", "rectOffsetY"
-      ];
-
       persistentInputs.forEach(name => {
         const input = inputs[name];
         if (!input) return;
@@ -800,7 +755,6 @@ function mainLoop(now) {
     };
 
     snow.updateSettings(configUpdate);
-    maybeAutoSaveSettings();
   }
 
   snowAccumMs += deltaMs;
