@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Snowfall + Rive UI</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff00;
+      overflow: hidden;
+    }
+    #container {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      margin: 0 auto;
+      background: #ffffff00;
+    }
+    #rive-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px; 
+      height: 1080px;
+      pointer-events: auto; 
+      image-rendering: auto;
+    }
+    #snow-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      pointer-events: none; 
+    }
+
+  </style>
+</head>
+<body>
+</div>
+  <div id="container">
+    <canvas id="snow-canvas" width="1920" height="1080"></canvas>
+    <canvas id="rive-canvas" width="1920" height="1080"></canvas>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.32.1/rive.js"></script>
+  <script src="vtsConnector.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
