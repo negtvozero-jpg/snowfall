@@ -17,7 +17,71 @@ const LOGICAL_WIDTH = 1920, LOGICAL_HEIGHT = 1080;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const toRad = (deg) => (deg * Math.PI) / 180;
 
-const STORAGE_KEY = "snowfall_settings_v1";
+const SETTINGS_STORAGE_KEY = "snowfall_settings_beta";
+
+const PERSISTENT_INPUTS = [
+  "density", "velocity", "direction",
+  "flakeSizeMin", "flakeSizeMax", "feather",
+  "hitboxX", "hitboxY", "hitboxRadius",
+  "rectHitboxX", "rectHitboxY",
+  "rectHitboxWidth", "rectHitboxHeight",
+  "isHeadEnabled", "isShouldersEnabled",
+  "offsetX", "offsetY",
+  "rectOffsetX", "rectOffsetY"
+];
+
+let lastSavedSettingsJson = null;
+let lastSaveTimeMs = 0;
+const SETTINGS_SAVE_INTERVAL_MS = 2000;
+
+function loadSettingsFromStorage() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn("localStorage load failed:", err);
+    return null;
+  }
+}
+
+function saveSettingsToStorage(snapshot) {
+  try {
+    const json = JSON.stringify(snapshot);
+    localStorage.setItem(SETTINGS_STORAGE_KEY, json);
+    lastSavedSettingsJson = json;
+    lastSaveTimeMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    // console.log("💾 settings saved", snapshot);
+  } catch (err) {
+    console.warn("localStorage save failed:", err);
+  }
+}
+
+function collectSettingsSnapshot() {
+  const snap = {};
+  PERSISTENT_INPUTS.forEach((name) => {
+    const inp = inputs[name];
+    if (inp && inp.value !== undefined && inp.value !== null) {
+      snap[name] = inp.value;
+    }
+  });
+  return snap;
+}
+
+function maybeAutoSaveSettings() {
+  // só salva se já temos VM
+  if (!vm) return;
+
+  const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
+  if (now - lastSaveTimeMs < SETTINGS_SAVE_INTERVAL_MS) return;
+
+  const snap = collectSettingsSnapshot();
+  const json = JSON.stringify(snap);
+
+  if (json === lastSavedSettingsJson) return;
+
+  saveSettingsToStorage(snap);
+}
 
 function saveSettings(state) {
   try {
@@ -574,6 +638,18 @@ function initRive() {
       inputNames.forEach(name => {
         inputs[name] = vm.number(name) || vm.boolean(name);
       });
+
+      const saved = loadSettingsFromStorage();
+      if (saved) {
+        console.log("🔄 Restaurando configurações salvas…", saved);
+        PERSISTENT_INPUTS.forEach((name) => {
+          const inp = inputs[name];
+          if (inp && saved[name] !== undefined) {
+            inp.value = saved[name];
+          }
+        });
+      }
+
       
       const persistentInputs = [
         "density", "velocity", "direction",
@@ -598,16 +674,6 @@ function initRive() {
           saveSettings(snapshot);
         };
       });
-
-      const saved = loadSettings();
-      if (saved) {
-        console.log("🔄 Restaurando configurações salvas…", saved);
-        persistentInputs.forEach(name => {
-          if (inputs[name] && saved[name] !== undefined) {
-            inputs[name].value = saved[name];
-          }
-        });
-      }
 
       if (setupSnowCanvas()) {
         snow = new SnowEngine(snowCanvas, { density: 50, velocity: 80, direction: 0 });
@@ -734,6 +800,7 @@ function mainLoop(now) {
     };
 
     snow.updateSettings(configUpdate);
+    maybeAutoSaveSettings();
   }
 
   snowAccumMs += deltaMs;
