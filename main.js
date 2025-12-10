@@ -1,4 +1,4 @@
-// ===== DECLARAÇÕES GLOBAIS (mantenha no topo) =====
+
 const VTSState = {
   connected: false,
   modelX: 0, modelY: 0, modelScale: 1, modelRotationZ: 0,
@@ -12,7 +12,7 @@ const HEAD_RANGE_X_FRAC = 0.25, HEAD_RANGE_Y_FRAC = 0.25;
 const VTS_SHOULDER_STRENGTH = 0.6;
 const MAX_TILT_DEG = 90;
 const HEAD_TILT_MULTIPLIER = 2.0; 
-const HEAD_TILT_FALLBACK_RADIUS = 105; 
+const HEAD_TILT_FALLBACK_RADIUS = 500; 
 const LOGICAL_WIDTH = 1920, LOGICAL_HEIGHT = 1080;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const toRad = (deg) => (deg * Math.PI) / 180;
@@ -38,9 +38,8 @@ let snowCanvas = null, snowCtx = null, snowDprScale = 0.5;
 let snow = null; 
 const riveCanvas = document.getElementById("rive-canvas");
 let riveInstance = null, vm = null;
-const inputs = {}; // ✅ Declarado UMA vez no topo
+const inputs = {};
 
-// ===== FUNÇÕES DE STORAGE =====
 function loadSettingsFromStorage() {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
@@ -87,7 +86,6 @@ function maybeAutoSaveSettings() {
   saveSettingsToStorage(snap);
 }
 
-// ===== Funções VTS =====
 window.onVTSPoseUpdate = function (params) {
   VTSState.connected = true;
   for (const p of params) {
@@ -109,7 +107,6 @@ window.onVTSPoseUpdate = function (params) {
 
 function getVTSHeadOffsets() {
   if (!VTSState.connected) return { x: 0, y: 0, scale: 1 };
-  // ... (resto do código igual) ...
   const fx = clamp(VTSState.faceX, -FACE_RANGE, FACE_RANGE) / FACE_RANGE;
   const fy = -clamp(VTSState.faceY, -FACE_RANGE, FACE_RANGE) / FACE_RANGE;
   const mx = clamp(VTSState.modelX, -MODEL_RANGE, MODEL_RANGE) / MODEL_RANGE;
@@ -148,7 +145,6 @@ function getVTSBodyOffsets() {
   return { x: head.x * VTS_SHOULDER_STRENGTH, y: head.y * VTS_SHOULDER_STRENGTH, scale: head.scale };
 }
 
-// ===== CANVAS E ENGINE =====
 function setupSnowCanvas() {
   snowCanvas = document.getElementById("snow-canvas");
   if (!snowCanvas) {
@@ -188,7 +184,6 @@ function joystickXYToAngleDeg(x, y) {
   return deg;
 }
 
-// ===== CLASSE SNOWENGINE (com wrap corrigido) =====
 class SnowEngine {
   constructor(canvas, config = {}) {
     if (!canvas || !canvas.getContext) {
@@ -243,7 +238,6 @@ class SnowEngine {
   }
 
   wrapFlakePosition(flake) {
-    // Wrap vertical (reaparece no topo ou fundo)
     if (flake.y > this.height + 10) {
       flake.y = -10;
       flake.x = Math.random() * this.width;
@@ -265,7 +259,6 @@ class SnowEngine {
       return true;
     }
 
-    // Wrap horizontal (reaparece nos lados)
     if (flake.x < -10) {
       flake.x = this.width + 10;
       return true;
@@ -284,7 +277,7 @@ class SnowEngine {
     for (let i = 0; i < count; i++) {
       this.snowflakes.push({
         x: Math.random() * this.width,
-        y: -10, // ✅ SEMPRE spawna no topo
+        y: -10,
         size: this.randomFlakeSize(),
         speed: 0.8 + Math.random() * 0.4,
         sway: 10 + Math.random() * 20,
@@ -464,8 +457,6 @@ class SnowEngine {
             flake.opacity -= this.meltSpeed * dt * 2;
           }
         }
-
-        // ✅ CHAMADA DENTRO DO LOOP E DO BLOCO if (!remove)
         this.wrapFlakePosition(flake);
       }
 
@@ -477,7 +468,7 @@ class SnowEngine {
     for (let j = 0; j < deficit; j++) {
       this.snowflakes.push({
         x: Math.random() * this.width,
-        y: -10, // ✅ SEMPRE spawna no topo
+        y: -10, 
         size: this.randomFlakeSize(),
         speed: 0.8 + Math.random() * 0.4,
         sway: 10 + Math.random() * 20,
@@ -593,19 +584,17 @@ function initRive() {
         "rectHitboxWidth", "rectHitboxHeight", "rectHitboxCornerRadius",
         "hitboxEnabled", "rectHitboxEnabled", "showHitbox", "showRectHitbox",
         "isSetupMode", "isHeadEnabled", "isShouldersEnabled",
-        "offsetX", "offsetY", "rectOffsetX", "rectOffsetY"
+        "offsetX", "offsetY", "rectOffsetX", "rectOffsetY", "headTilt"
       ];
 
       inputNames.forEach(name => {
         inputs[name] = vm.number(name) || vm.boolean(name);
       });
 
-      // ===== RESTAURAÇÃO COM DELAY E LOGS =====
       const saved = loadSettingsFromStorage();
       if (saved) {
         console.log("🔄 Restaurando configurações salvas…", saved);
         
-        // Aguarda um frame para garantir que a UI esteja pronta
         requestAnimationFrame(() => {
           PERSISTENT_INPUTS.forEach((name) => {
             const inp = inputs[name];
@@ -613,21 +602,19 @@ function initRive() {
               console.log(`✅ Restaurando ${name}: ${saved[name]} → ${inp.value}`);
               inp.value = saved[name];
               
-              // Força notificação se disponível
+
               if (inp.onChange) {
                 inp.onChange();
               }
             }
           });
           
-          // Força renderização
           if (riveInstance) {
             riveInstance.startRendering();
           }
         });
       }
 
-      // ===== BINDING DOS EVENTOS =====
       PERSISTENT_INPUTS.forEach(name => {
         const input = inputs[name];
         if (!input) {
