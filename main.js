@@ -11,8 +11,7 @@ const FACE_WEIGHT = 1.0, MODEL_WEIGHT = 1.0;
 const HEAD_RANGE_X_FRAC = 0.25, HEAD_RANGE_Y_FRAC = 0.25;
 const VTS_SHOULDER_STRENGTH = 0.6;
 const MAX_TILT_DEG = 90;
-const HEAD_TILT_MULTIPLIER = 2.0; 
-const HEAD_TILT_FALLBACK_RADIUS = 500; 
+const HEAD_TILT_FALLBACK_RADIUS = 150; 
 const LOGICAL_WIDTH = 1920, LOGICAL_HEIGHT = 1080;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const toRad = (deg) => (deg * Math.PI) / 180;
@@ -27,7 +26,7 @@ const PERSISTENT_INPUTS = [
   "rectHitboxWidth", "rectHitboxHeight",
   "isHeadEnabled", "isShouldersEnabled",
   "offsetX", "offsetY",
-  "rectOffsetX", "rectOffsetY"
+  "rectOffsetX", "rectOffsetY", "headTilt"
 ];
 
 let lastSavedSettingsJson = null;
@@ -118,6 +117,7 @@ function getVTSHeadOffsets() {
   const scaleFactor = clamp(VTSState.modelScale || 1, 0.5, 1.5);
   const rangeX = LOGICAL_WIDTH  * HEAD_RANGE_X_FRAC * scaleFactor;
   const rangeY = LOGICAL_HEIGHT * HEAD_RANGE_Y_FRAC * scaleFactor;
+  const HEAD_TILT_MULTIPLIER = getHeadTilt(); 
 
   let offsetX = nx * rangeX;
   let offsetY = ny * rangeY;
@@ -203,7 +203,7 @@ class SnowEngine {
       density: 50, velocity: 80, direction: 0,
       flakeSizeMin: 2, flakeSizeMax: 6, flakeFeather: 3,
       hitboxEnabled: true, hitboxX: 960, hitboxY: 540, hitboxRadius: 95,
-      hitboxStrength: 0.8, hitboxFeather: 60, showHitbox: true,
+      hitboxStrength: 1, hitboxFeather: 60, showHitbox: true,
       rectHitboxEnabled: true, rectHitboxX: 708, rectHitboxY: 796,
       rectHitboxWidth: 470, rectHitboxHeight: 150, rectHitboxCornerRadius: 147,
       rectHitboxStrength: 0.5, showRectHitbox: true,
@@ -642,6 +642,10 @@ function initRive() {
       }
     },
   });
+}
+
+function getHeadTilt() {
+    return inputs.headTilt ? inputs.headTilt.value : 2.5;
 }
 
 // ===== MAIN LOOP =====
